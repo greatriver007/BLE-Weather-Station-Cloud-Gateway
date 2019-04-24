@@ -31,14 +31,28 @@ Distributed as-is; no warranty is given.
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 
-/******************     NINA-W10 PIN Definition      ************************************
- * .platformio\packages\framework-arduinoespressif32\variants\nina_w10
-uint8LED_GREEN = 33;
-LED_RED   = 23;
-LED_BLUE  = 21;
+// E-paper display
+#include <SPI.h>
+#include <MiniGrafx.h>
+#include "DisplayDriver.h"
+#include "EPD_WaveShare_42.h"  // Hardware-specific library
+#include "WeatherIcons.h"
 
-SW2       = 27;
-***************************************************************************************/
+#define CS    2
+#define RST   15
+#define DC    5
+#define BUSY  4
+#define USR_B 12              // User button
+
+#define SCREEN_WIDTH   400
+#define SCREEN_HEIGHT  300
+#define BITS_PER_PIXEL 1
+
+uint16_t palette[] = {0, 1};
+
+EPD_WaveShare42 epd(CS, RST, DC, BUSY);
+MiniGrafx gfx = MiniGrafx(&epd, BITS_PER_PIXEL, palette);
+uint32_t startMillis;
 
 // You should get Auth Token in the Blynk App. Go to the Project Settings (nut icon)
 char auth[] = "YourAuthToken";
@@ -73,7 +87,7 @@ Adafruit_SHT31 sht31 = Adafruit_SHT31();
 
 // Create timers using Ticker library in oder to avoid delay()
 Ticker blinkIt;
-Ticker readIt;
+Ticker readLocal;
 
 float tLocal = NAN;
 float hLocal = NAN;
@@ -105,18 +119,21 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks
     if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(serviceUUID))
     {
       BLEDevice::getScan()->stop();
-      myDevice = new BLEAdvertisedDevice(advertisedDevice);
+      myDevice  = new BLEAdvertisedDevice(advertisedDevice);
       doConnect = true;
-      doScan = true;
+      doScan    = true;
     } // Found our server
   } // onResult
 };
 
 class MyClientCallback : public BLEClientCallbacks {
-  void onConnect(BLEClient* pclient) {
+  void onConnect(BLEClient* pclient)
+  {
+    Serial.println("onConnect");
   }
 
-  void onDisconnect(BLEClient* pclient) {
+  void onDisconnect(BLEClient* pclient)
+  {
     connected = false;
     Serial.println("onDisconnect");
   }
@@ -168,14 +185,18 @@ bool connectToServer() {
     // Read the value of the characteristic.
     if(tCharacteristic->canRead()) {
       std::string value = tCharacteristic->readValue();
+      tBLE = atoi(value.c_str()) / 100.0f;
+
       Serial.print("The characteristic value was: ");
-      Serial.println(value.c_str());
+      Serial.println(tBLE);
     }
 
     if(hCharacteristic->canRead()) {
       std::string value = hCharacteristic->readValue();
+      hBLE = atoi(value.c_str()) / 100.0f;
+
       Serial.print("The characteristic value was: ");
-      Serial.println(value.c_str());
+      Serial.println(hBLE);
     }
 
     if(tCharacteristic->canNotify())
@@ -198,6 +219,11 @@ void setup()
 
   Serial.begin(115200);
 
+  // Start display
+  gfx.init();
+  gfx.setRotation(0);
+  gfx.setFastRefresh(false);
+
   if( !sht31.begin(0x44) ){
     Serial.println("Failed to find sensor, please check wiring and address");
   }
@@ -213,12 +239,12 @@ void setup()
   // Scan duration in ms
   pBLEScan->setWindow(449);
   // Active scan means a scan response is expected
-  pBLEScan->setActiveScan(true);
+  pBLEScan->setActiveScan(false);
   // Start scan for [in] seconds
   pBLEScan->start(5, false);
 
   // Start Timers, read sensor and blink Blue LED
-  readIt.attach( 10, readSensor ); // we will now read the sensor only when sending data
+  readLocal.attach( 10, readSensor ); // we will now read the sensor only when sending data
   blinkIt.attach( 1, blinky );
 
   WiFi.mode(WIFI_STA);
@@ -235,7 +261,7 @@ void setup()
   // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
   // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
 
-  ArduinoOTA
+  /*ArduinoOTA
   .onStart([]() {
     String type;
     if (ArduinoOTA.getCommand() == U_FLASH)
@@ -261,7 +287,7 @@ void setup()
     else if (error == OTA_END_ERROR) Serial.println("End Failed");
   });
 
-  ArduinoOTA.begin();
+  ArduinoOTA.begin();*/
 
   Blynk.config(auth);
 
@@ -274,7 +300,7 @@ void setup()
 void loop()
 {
   Blynk.run();
-  ArduinoOTA.handle();
+  //ArduinoOTA.handle();
   
   // If "doConnect" is true BLE Server has been found, Now we connect to it.
   if (doConnect == true) 
@@ -291,9 +317,6 @@ void loop()
     doConnect = false;
   }
 
-  // Should probably put this on a Timer but would work for this example.
-  delay(2000);
-
   // If connected to a peer BLE Server:
   if (connected)
   {
@@ -301,7 +324,7 @@ void loop()
   }
   else if(doScan)
   {
-    BLEDevice::getScan()->start(0);  // this is just eample to start scan after disconnect, most likely there is better way to do it in arduino
+    BLEDevice::getScan()->start(0);  // Start scan after disconnect
   }
 
 } // end of loop

@@ -36,7 +36,8 @@ install:
     # https://github.com/sstaub/Ticker           -> 1586
     # https://github.com/sandeepmistry/arduino-BLEPeripheral
     # https://github.com/blynkkk/blynk-library
-    - platformio lib -g install 479 1586 259 451
+    # https://github.com/ThingPulse/minigrafx
+    - platformio lib -g install 479 1586 259 451 1670
 
 script:
     - platformio ci --lib="." $(PLATFORMIO_CI_ARGS)

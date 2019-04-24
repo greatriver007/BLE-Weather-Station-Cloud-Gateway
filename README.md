@@ -86,6 +86,8 @@ Generally, Peripheral = Server. Therefore if you're working on a end device, an 
 
 ## Credits
 
+Weather Icons and layout inspired by [ThingPulse ](https://github.com/ThingPulse/minigrafx)
+
 Github Shields and Badges created with [Shields.io](https://github.com/badges/shields/)
 
 Adafruit [SHT31 Library](https://www.adafruit.com/product/2857)
